@@ -1,6 +1,6 @@
 cabal-version:      2.4
 name:               dataframe
-version:            0.4.0.10
+version:            0.4.1.0
 
 synopsis: A fast, safe, and intuitive DataFrame library.
 
@@ -162,6 +162,8 @@ executable dataframe
                       filepath >= 1.4 && < 2,
                       process >= 1.6 && < 2,
                       time >= 1.12 && < 2
+    if !os(windows)
+        build-depends: unix >= 2 && < 3
     hs-source-dirs:   app
     default-language: Haskell2010
     ghc-options: -rtsopts -threaded -with-rtsopts=-N
@@ -187,6 +189,7 @@ test-suite tests
     main-is: Main.hs
     other-modules: Assertions,
                    Functions,
+                   GenDataFrame,
                    Operations.Aggregations,
                    Operations.Apply,
                    Operations.Core,
@@ -198,6 +201,7 @@ test-suite tests
                    Operations.Merge,
                    Operations.ReadCsv,
                    Operations.Sort,
+                   Operations.Subset,
                    Operations.Statistics,
                    Operations.Take,
                    Parquet
@@ -205,6 +209,7 @@ test-suite tests
                     dataframe ^>= 0.4,
                     directory >= 1.3.0.0 && < 2,
                     HUnit ^>= 1.6,
+                    QuickCheck >= 2 && < 3,
                     random >= 1 && < 2,
                     random-shuffle >= 0.0.4 && < 1,
                     random >= 1 && < 2,

@@ -680,7 +680,8 @@ fromRows names rows =
 
 @
 -}
-valueCounts :: forall a. (Columnable a) => Expr a -> DataFrame -> [(a, Int)]
+valueCounts ::
+    forall a. (Ord a, Columnable a) => Expr a -> DataFrame -> [(a, Int)]
 valueCounts expr df = case columnAsVector expr df of
     Left e -> throw e
     Right column' ->
@@ -702,7 +703,7 @@ valueCounts expr df = case columnAsVector expr df of
 @
 -}
 valueProportions ::
-    forall a. (Columnable a) => Expr a -> DataFrame -> [(a, Double)]
+    forall a. (Ord a, Columnable a) => Expr a -> DataFrame -> [(a, Double)]
 valueProportions expr df = case columnAsVector expr df of
     Left e -> throw e
     Right column' ->
@@ -864,7 +865,8 @@ Returns 'Left' with a 'DataFrameException' if the column cannot be converted to 
 This may occur if the column contains non-numeric data or values outside the 'Int' range.
 -}
 columnAsIntVector ::
-    Expr Int -> DataFrame -> Either DataFrameException (VU.Vector Int)
+    (Columnable a, Num a) =>
+    Expr a -> DataFrame -> Either DataFrameException (VU.Vector Int)
 columnAsIntVector (Col name) df = case getColumn name df of
     Just col -> toIntVector col
     Nothing ->
@@ -880,7 +882,8 @@ Returns 'Left' with a 'DataFrameException' if the column cannot be converted to 
 This may occur if the column contains non-numeric data.
 -}
 columnAsDoubleVector ::
-    Expr Double -> DataFrame -> Either DataFrameException (VU.Vector Double)
+    (Columnable a, Num a) =>
+    Expr a -> DataFrame -> Either DataFrameException (VU.Vector Double)
 columnAsDoubleVector (Col name) df = case getColumn name df of
     Just col -> toDoubleVector col
     Nothing ->
@@ -896,7 +899,8 @@ Returns 'Left' with a 'DataFrameException' if the column cannot be converted to 
 This may occur if the column contains non-numeric data.
 -}
 columnAsFloatVector ::
-    Expr Float -> DataFrame -> Either DataFrameException (VU.Vector Float)
+    (Columnable a, Num a) =>
+    Expr a -> DataFrame -> Either DataFrameException (VU.Vector Float)
 columnAsFloatVector (Col name) df = case getColumn name df of
     Just col -> toFloatVector col
     Nothing ->
