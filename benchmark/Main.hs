@@ -6,7 +6,7 @@ import qualified DataFrame.Functions as F
 
 import Control.Monad (void)
 import Criterion.Main
-import DataFrame ((|>))
+import DataFrame.Operators
 import System.Process
 
 haskell :: IO ()
@@ -46,9 +46,9 @@ groupByHaskell = do
             |> D.groupBy ["ocean_proximity"]
             |> D.aggregate
                 [ F.minimum (F.col @Double "median_house_value")
-                    `F.as` "minimum_median_house_value"
+                    `as` "minimum_median_house_value"
                 , F.maximum (F.col @Double "median_house_value")
-                    `F.as` "maximum_median_house_value"
+                    `as` "maximum_median_house_value"
                 ]
 
 groupByPolars :: IO ()

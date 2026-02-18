@@ -40,14 +40,14 @@ allTypes =
         ,
             ( "timestamp_col"
             , D.fromList
-                [ UTCTime (fromGregorian 2009 3 1) (secondsToDiffTime 0)
-                , UTCTime (fromGregorian 2009 3 1) (secondsToDiffTime 60)
-                , UTCTime (fromGregorian 2009 4 1) (secondsToDiffTime 0)
-                , UTCTime (fromGregorian 2009 4 1) (secondsToDiffTime 60)
-                , UTCTime (fromGregorian 2009 2 1) (secondsToDiffTime 0)
-                , UTCTime (fromGregorian 2009 2 1) (secondsToDiffTime 60)
-                , UTCTime (fromGregorian 2009 1 1) (secondsToDiffTime 0)
-                , UTCTime (fromGregorian 2009 1 1) (secondsToDiffTime 60)
+                [ UTCTime{utctDay = fromGregorian 2009 3 1, utctDayTime = secondsToDiffTime 0}
+                , UTCTime{utctDay = fromGregorian 2009 3 1, utctDayTime = secondsToDiffTime 60}
+                , UTCTime{utctDay = fromGregorian 2009 4 1, utctDayTime = secondsToDiffTime 0}
+                , UTCTime{utctDay = fromGregorian 2009 4 1, utctDayTime = secondsToDiffTime 60}
+                , UTCTime{utctDay = fromGregorian 2009 2 1, utctDayTime = secondsToDiffTime 0}
+                , UTCTime{utctDay = fromGregorian 2009 2 1, utctDayTime = secondsToDiffTime 60}
+                , UTCTime{utctDay = fromGregorian 2009 1 1, utctDayTime = secondsToDiffTime 0}
+                , UTCTime{utctDay = fromGregorian 2009 1 1, utctDayTime = secondsToDiffTime 60}
                 ]
             )
         ]
@@ -59,6 +59,113 @@ allTypesPlain =
             "allTypesPlain"
             allTypes
             (unsafePerformIO (D.readParquet "./tests/data/alltypes_plain.parquet"))
+        )
+
+allTypesTinyPagesDimensions :: Test
+allTypesTinyPagesDimensions =
+    TestCase
+        ( assertEqual
+            "allTypesTinyPages last few"
+            (7300, 13)
+            ( unsafePerformIO
+                (fmap D.dimensions (D.readParquet "./tests/data/alltypes_tiny_pages.parquet"))
+            )
+        )
+
+tinyPagesLast10 :: D.DataFrame
+tinyPagesLast10 =
+    D.fromNamedColumns
+        [ ("id", D.fromList @Int32 (reverse [6174 .. 6183]))
+        , ("bool_col", D.fromList @Bool (Prelude.take 10 (cycle [False, True])))
+        , ("tinyint_col", D.fromList @Int32 [3, 2, 1, 0, 9, 8, 7, 6, 5, 4])
+        , ("smallint_col", D.fromList @Int32 [3, 2, 1, 0, 9, 8, 7, 6, 5, 4])
+        , ("int_col", D.fromList @Int32 [3, 2, 1, 0, 9, 8, 7, 6, 5, 4])
+        , ("bigint_col", D.fromList @Int64 [30, 20, 10, 0, 90, 80, 70, 60, 50, 40])
+        ,
+            ( "float_col"
+            , D.fromList @Float [3.3, 2.2, 1.1, 0, 9.9, 8.8, 7.7, 6.6, 5.5, 4.4]
+            )
+        ,
+            ( "date_string_col"
+            , D.fromList @Text
+                [ "09/11/10"
+                , "09/11/10"
+                , "09/11/10"
+                , "09/11/10"
+                , "09/10/10"
+                , "09/10/10"
+                , "09/10/10"
+                , "09/10/10"
+                , "09/10/10"
+                , "09/10/10"
+                ]
+            )
+        ,
+            ( "string_col"
+            , D.fromList @Text ["3", "2", "1", "0", "9", "8", "7", "6", "5", "4"]
+            )
+        ,
+            ( "timestamp_col"
+            , D.fromList @UTCTime
+                [ UTCTime
+                    { utctDay = fromGregorian 2010 9 10
+                    , utctDayTime = secondsToDiffTime 85384
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2010 9 10
+                    , utctDayTime = secondsToDiffTime 85324
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2010 9 10
+                    , utctDayTime = secondsToDiffTime 85264
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2010 9 10
+                    , utctDayTime = secondsToDiffTime 85204
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2010 9 9
+                    , utctDayTime = secondsToDiffTime 85144
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2010 9 9
+                    , utctDayTime = secondsToDiffTime 85084
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2010 9 9
+                    , utctDayTime = secondsToDiffTime 85024
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2010 9 9
+                    , utctDayTime = secondsToDiffTime 84964
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2010 9 9
+                    , utctDayTime = secondsToDiffTime 84904
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2010 9 9
+                    , utctDayTime = secondsToDiffTime 84844
+                    }
+                ]
+            )
+        , ("year", D.fromList @Int32 (replicate 10 2010))
+        , ("month", D.fromList @Int32 (replicate 10 9))
+        ]
+
+allTypesTinyPagesLastFew :: Test
+allTypesTinyPagesLastFew =
+    TestCase
+        ( assertEqual
+            "allTypesTinyPages dimensions"
+            tinyPagesLast10
+            ( unsafePerformIO
+                -- Excluding doubles because they are weird to compare.
+                ( fmap
+                    (D.takeLast 10 . D.exclude ["double_col"])
+                    (D.readParquet "./tests/data/alltypes_tiny_pages.parquet")
+                )
+            )
         )
 
 allTypesPlainSnappy :: Test
@@ -77,6 +184,176 @@ allTypesDictionary =
             "allTypesPlainSnappy"
             (D.filter (F.col @Int32 "id") (`elem` [0, 1]) allTypes)
             (unsafePerformIO (D.readParquet "./tests/data/alltypes_dictionary.parquet"))
+        )
+
+transactions :: D.DataFrame
+transactions =
+    D.fromNamedColumns
+        [ ("transaction_id", D.fromList [1 :: Int32, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+        ,
+            ( "event_time"
+            , D.fromList
+                [ UTCTime
+                    { utctDay = fromGregorian 2024 1 3
+                    , utctDayTime = secondsToDiffTime 29564 + picosecondsToDiffTime 2311000000
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2024 1 3
+                    , utctDayTime = secondsToDiffTime 35101 + picosecondsToDiffTime 118900000000
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2024 1 4
+                    , utctDayTime = secondsToDiffTime 39802 + picosecondsToDiffTime 774512000000
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2024 1 5
+                    , utctDayTime = secondsToDiffTime 53739 + picosecondsToDiffTime 1000000
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2024 1 6
+                    , utctDayTime = secondsToDiffTime 8278 + picosecondsToDiffTime 543210000000
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2024 1 6
+                    , utctDayTime = secondsToDiffTime 8284 + picosecondsToDiffTime 211000000000
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2024 1 7
+                    , utctDayTime = secondsToDiffTime 63000
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2024 1 8
+                    , utctDayTime = secondsToDiffTime 24259 + picosecondsToDiffTime 390000000000
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2024 1 9
+                    , utctDayTime = secondsToDiffTime 48067 + picosecondsToDiffTime 812345000000
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2024 1 10
+                    , utctDayTime = secondsToDiffTime 82799 + picosecondsToDiffTime 999999000000
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2024 1 11
+                    , utctDayTime = secondsToDiffTime 36000 + picosecondsToDiffTime 100000000000
+                    }
+                , UTCTime
+                    { utctDay = fromGregorian 2024 1 12
+                    , utctDayTime = secondsToDiffTime 56028 + picosecondsToDiffTime 667891000000
+                    }
+                ]
+            )
+        ,
+            ( "user_email"
+            , D.fromList
+                [ "alice@example.com" :: Text
+                , "bob@example.com"
+                , "carol@example.com"
+                , "alice@example.com"
+                , "dave@example.com"
+                , "dave@example.com"
+                , "eve@example.com"
+                , "frank@example.com"
+                , "grace@example.com"
+                , "dave@example.com"
+                , "alice@example.com"
+                , "heidi@example.com"
+                ]
+            )
+        ,
+            ( "transaction_type"
+            , D.fromList
+                [ "purchase" :: Text
+                , "purchase"
+                , "refund"
+                , "purchase"
+                , "purchase"
+                , "purchase"
+                , "purchase"
+                , "withdrawal"
+                , "purchase"
+                , "purchase"
+                , "purchase"
+                , "refund"
+                ]
+            )
+        ,
+            ( "amount"
+            , D.fromList
+                [ 142.50 :: Double
+                , 29.99
+                , 89.00
+                , 2399.00
+                , 15.00
+                , 15.00
+                , 450.75
+                , 200.00
+                , 55.20
+                , 3200.00
+                , 74.99
+                , 120.00
+                ]
+            )
+        ,
+            ( "currency"
+            , D.fromList
+                [ "USD" :: Text
+                , "USD"
+                , "EUR"
+                , "USD"
+                , "GBP"
+                , "GBP"
+                , "USD"
+                , "EUR"
+                , "CAD"
+                , "USD"
+                , "USD"
+                , "GBP"
+                ]
+            )
+        ,
+            ( "status"
+            , D.fromList
+                [ "approved" :: Text
+                , "approved"
+                , "approved"
+                , "declined"
+                , "approved"
+                , "declined"
+                , "approved"
+                , "approved"
+                , "approved"
+                , "flagged"
+                , "approved"
+                , "approved"
+                ]
+            )
+        ,
+            ( "location"
+            , D.fromList
+                [ "New York, US" :: Text
+                , "London, GB"
+                , "Berlin, DE"
+                , "New York, US"
+                , "Manchester, GB"
+                , "Lagos, NG"
+                , "San Francisco, US"
+                , "Paris, FR"
+                , "Toronto, CA"
+                , "New York, US"
+                , "New York, US"
+                , "Edinburgh, GB"
+                ]
+            )
+        ]
+
+transactionsTest :: Test
+transactionsTest =
+    TestCase
+        ( assertEqual
+            "transactions"
+            transactions
+            (unsafePerformIO (D.readParquet "./tests/data/transactions.parquet"))
         )
 
 mtCarsDataset :: D.DataFrame
@@ -537,7 +814,13 @@ mtCars =
             (unsafePerformIO (D.readParquet "./tests/data/mtcars.parquet"))
         )
 
--- Uncomment to run parquet tests.
--- Currently commented because they don't run with github CI
 tests :: [Test]
-tests = [allTypesPlain, allTypesPlainSnappy, allTypesDictionary, mtCars]
+tests =
+    [ allTypesPlain
+    , allTypesPlainSnappy
+    , allTypesDictionary
+    , mtCars
+    , allTypesTinyPagesLastFew
+    , allTypesTinyPagesDimensions
+    , transactionsTest
+    ]

@@ -8,9 +8,8 @@ import qualified DataFrame as D
 import qualified DataFrame.Functions as F
 
 import Data.Char
-import DataFrame ((|>))
 import DataFrame.DecisionTree
-import DataFrame.Functions ((.&&), (.=), (.==))
+import DataFrame.Operators
 
 import System.Random
 

@@ -65,6 +65,7 @@ library
                     DataFrame.Operations.Core,
                     DataFrame.Operations.Join,
                     DataFrame.Operations.Merge,
+                    DataFrame.Operators,
                     DataFrame.Operations.Permutation,
                     DataFrame.Operations.Subset,
                     DataFrame.Operations.Statistics,

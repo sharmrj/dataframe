@@ -22,10 +22,12 @@ import System.Random
 import Torch
 
 import Data.Text (Text)
-import DataFrame ((|>))
-import DataFrame.Functions ((.=))
+import DataFrame.Operators
 
-$(F.declareColumnsFromCsvFile "../data/housing.csv")
+$( F.declareColumnsFromCsvWithOpts
+    (D.defaultReadOptions{D.typeSpec = D.InferFromSample 300})
+    "../data/housing.csv"
+ )
 
 main :: IO ()
 main = do

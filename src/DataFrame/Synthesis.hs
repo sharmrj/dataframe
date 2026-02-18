@@ -37,8 +37,8 @@ import qualified Data.Set as S
 import qualified Data.Text as T
 import Data.Type.Equality
 import qualified Data.Vector.Unboxed as VU
-import DataFrame.Functions ((.&&), (.<=), (.>), (.||))
 import qualified DataFrame.Operations.Core as D
+import DataFrame.Operators
 import Debug.Trace (trace)
 import Type.Reflection (typeRep)
 

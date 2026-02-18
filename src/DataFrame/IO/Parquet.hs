@@ -1,11 +1,10 @@
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
-module DataFrame.IO.Parquet (
-    readParquet,
-    readParquetFiles,
-) where
+module DataFrame.IO.Parquet where
 
 import Control.Monad
 import Data.Bits
@@ -17,6 +16,8 @@ import qualified Data.List as L
 import qualified Data.Map as M
 import qualified Data.Text as T
 import Data.Text.Encoding
+import Data.Time
+import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Data.Word
 import qualified DataFrame.Internal.Column as DI
 import DataFrame.Internal.DataFrame (DataFrame)
@@ -31,6 +32,7 @@ import DataFrame.IO.Parquet.Thrift
 import DataFrame.IO.Parquet.Types
 import System.Directory (doesDirectoryExist)
 
+import qualified Data.Vector.Unboxed as VU
 import System.FilePath ((</>))
 
 {- | Read a parquet file from path and load it into a dataframe.
@@ -47,6 +49,7 @@ readParquet path = do
     let columnNames = map fst columnPaths
 
     colMap <- newIORef (M.empty :: M.Map T.Text DI.Column)
+    lTypeMap <- newIORef (M.empty :: M.Map T.Text LogicalType)
 
     contents <- BSO.readFile path
 
@@ -96,6 +99,7 @@ readParquet path = do
             let schemaTail = drop 1 (schema fileMetadata)
             let colPath = columnPathInSchema (columnMetaData colChunk)
             let (maxDef, maxRep) = levelsForPath schemaTail colPath
+            let lType = logicalType (schemaTail !! colIdx)
             column <-
                 processColumnPages
                     (maxDef, maxRep)
@@ -103,13 +107,17 @@ readParquet path = do
                     (columnType metadata)
                     primaryEncoding
                     maybeTypeLength
+                    lType
 
             modifyIORef colMap (M.insertWith DI.concatColumnsEither colName column)
+            modifyIORef lTypeMap (M.insert colName lType)
 
     finalColMap <- readIORef colMap
+    finalLTypeMap <- readIORef lTypeMap
     let orderedColumns =
             map
-                (\name -> (name, finalColMap M.! name))
+                ( \name -> (name, applyLogicalType (finalLTypeMap M.! name) $ finalColMap M.! name)
+                )
                 (filter (`M.member` finalColMap) columnNames)
 
     pure $ DI.fromNamedColumns orderedColumns
@@ -175,8 +183,9 @@ processColumnPages ::
     ParquetType ->
     ParquetEncoding ->
     Maybe Int32 ->
+    LogicalType ->
     IO DI.Column
-processColumnPages (maxDef, maxRep) pages pType _ maybeTypeLength = do
+processColumnPages (maxDef, maxRep) pages pType _ maybeTypeLength lType = do
     let dictPages = filter isDictionaryPage pages
     let dataPages = filter isDataPage pages
 
@@ -299,3 +308,37 @@ processColumnPages (maxDef, maxRep) pages pType _ maybeTypeLength = do
         (c : cs) ->
             pure $
                 L.foldl' (\l r -> fromRight (error "concat failed") (DI.concatColumns l r)) c cs
+
+applyLogicalType :: LogicalType -> DI.Column -> DI.Column
+applyLogicalType (TimestampType isUTC unit) col =
+    fromRight col $
+        DI.mapColumn
+            (microsecondsToUTCTime . (* (1_000_000 `div` unitDivisor unit)))
+            col
+applyLogicalType (DecimalType precision scale) col
+    | precision <= 9 = case DI.toVector @Int32 @VU.Vector col of
+        Right xs ->
+            DI.fromUnboxedVector $
+                VU.map (\raw -> fromIntegral @Int32 @Double raw / 10 ^ scale) xs
+        Left _ -> col
+    | precision <= 18 = case DI.toVector @Int64 @VU.Vector col of
+        Right xs ->
+            DI.fromUnboxedVector $
+                VU.map (\raw -> fromIntegral @Int64 @Double raw / 10 ^ scale) xs
+        Left _ -> col
+    | otherwise = col
+applyLogicalType _ col = col
+
+microsecondsToUTCTime :: Int64 -> UTCTime
+microsecondsToUTCTime us =
+    posixSecondsToUTCTime (fromIntegral us / 1_000_000)
+
+unitDivisor :: TimeUnit -> Int64
+unitDivisor MILLISECONDS = 1_000
+unitDivisor MICROSECONDS = 1_000_000
+unitDivisor NANOSECONDS = 1_000_000_000
+unitDivisor TIME_UNIT_UNKNOWN = 1
+
+applyScale :: Int32 -> Int32 -> Double
+applyScale scale rawValue =
+    fromIntegral rawValue / (10 ^ scale)

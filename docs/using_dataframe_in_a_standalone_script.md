@@ -134,16 +134,15 @@ module Main where
 import qualified DataFrame as D
 import qualified DataFrame.Functions as F
 
-import DataFrame ((|>))
-import DataFrame.Functions ((.>=), (.&&))
+import DataFrame.Operators
 
 $(F.declareColumnsFromCsvFile "./housing.csv")
 
 main :: IO ()
 main = do
     df <- D.readCsv "./housing.csv"
-    let (isExpensive, dfWithExpensive) = D.deriveWithExpr "is_expensive" (median_house_value .>= 500000)
-        (roomsPerHoushold, dfWithRoomsPerHousehold) = D.deriveWithExpr "rooms_per_household" (total_rooms / households)
+    let (isExpensive, dfWithExpensive) = D.deriveWithExpr "is_expensive" (median_house_value .>= 500000) df
+        (roomsPerHoushold, dfWithRoomsPerHousehold) = D.deriveWithExpr "rooms_per_household" (total_rooms / households) dfWithExpensive
         meanBedrooms = D.meanMaybe total_bedrooms dfWithRoomsPerHousehold
         dfWithTotalBedroomsImputed = D.impute total_bedrooms meanBedrooms dfWithRoomsPerHousehold
 
@@ -161,8 +160,7 @@ module Main where
 import qualified DataFrame as D
 import qualified DataFrame.Functions as F
 
-import DataFrame ((|>))
-import DataFrame.Functions ((.>=), (.&&))
+import DataFrame.Operators
 
 import DataFrame.Monad
 

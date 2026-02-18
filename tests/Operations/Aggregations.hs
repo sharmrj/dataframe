@@ -9,6 +9,7 @@ import qualified DataFrame.Functions as F
 import qualified DataFrame.Internal.Column as DI
 
 import Data.Function
+import DataFrame.Operators
 import Test.HUnit
 
 values :: [(T.Text, DI.Column)]
@@ -36,7 +37,7 @@ foldAggregation =
             )
             ( testData
                 & D.groupBy ["test1"]
-                & D.aggregate [F.count (F.col @Int "test2") `F.as` "test2"]
+                & D.aggregate [F.count (F.col @Int "test2") `as` "test2"]
                 & D.sortBy [D.Asc (F.col @Int "test1")]
             )
         )
@@ -53,7 +54,7 @@ numericAggregation =
             )
             ( testData
                 & D.groupBy ["test1"]
-                & D.aggregate [F.mean (F.col @Int "test2") `F.as` "test2"]
+                & D.aggregate [F.mean (F.col @Int "test2") `as` "test2"]
                 & D.sortBy [D.Asc (F.col @Int "test1")]
             )
         )
@@ -71,7 +72,7 @@ numericAggregationOfUnaggregatedUnaryOp =
             ( testData
                 & D.groupBy ["test1"]
                 & D.aggregate
-                    [ F.mean (F.lift (fromIntegral @Int @Double) (F.col @Int "test2")) `F.as` "test2"
+                    [ F.mean (F.lift (fromIntegral @Int @Double) (F.col @Int "test2")) `as` "test2"
                     ]
                 & D.sortBy [D.Asc (F.col @Int "test1")]
             )
@@ -89,7 +90,7 @@ numericAggregationOfUnaggregatedBinaryOp =
             )
             ( testData
                 & D.groupBy ["test1"]
-                & D.aggregate [F.mean (F.col @Int "test2" + F.col @Int "test2") `F.as` "test2"]
+                & D.aggregate [F.mean (F.col @Int "test2" + F.col @Int "test2") `as` "test2"]
                 & D.sortBy [D.Asc (F.col @Int "test1")]
             )
         )
@@ -108,7 +109,7 @@ reduceAggregationOfUnaggregatedUnaryOp =
                 & D.groupBy ["test1"]
                 & D.aggregate
                     [ F.maximum (F.lift (fromIntegral @Int @Double) (F.col @Int "test2"))
-                        `F.as` "test2"
+                        `as` "test2"
                     ]
                 & D.sortBy [D.Asc (F.col @Int "test1")]
             )
@@ -127,7 +128,7 @@ reduceAggregationOfUnaggregatedBinaryOp =
             ( testData
                 & D.groupBy ["test1"]
                 & D.aggregate
-                    [F.maximum (F.col @Int "test2" + F.col @Int "test2") `F.as` "test2"]
+                    [F.maximum (F.col @Int "test2" + F.col @Int "test2") `as` "test2"]
                 & D.sortBy [D.Asc (F.col @Int "test1")]
             )
         )

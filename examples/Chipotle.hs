@@ -11,9 +11,8 @@ import qualified DataFrame.Functions as F
 import Text.Read (readMaybe)
 
 import Data.Text (Text)
-import DataFrame ((|>))
-import DataFrame.Functions ((.&&), (.=), (.==))
 import DataFrame.Monad
+import DataFrame.Operators
 
 $( F.declareColumnsFromCsvWithOpts
     (D.defaultReadOptions{D.columnSeparator = '\t'})
@@ -57,7 +56,7 @@ main = do
                 , "max" .= F.maximum quantity
                 , "mean" .= F.mean quantity
                 ]
-            |> D.sortBy [D.Desc "sum"]
+            |> D.sortBy [D.Desc (F.col "sum" `asTypeOf` quantity)]
 
     let firstOrder =
             df

@@ -751,7 +751,7 @@ let decade d = let (y, _, _) = toGregorian d
 df_csv
     |> D.derive "decade" (F.lift decade (F.col @Day "birthdate"))
     |> D.groupBy ["decade"]
-    |> D.aggregate [F.count (F.col @Day "decade") `F.as` "Count"]
+    |> D.aggregate [F.count (F.col @Day "decade") `as` "Count"]
 ```
 
 **Output:**
@@ -793,15 +793,16 @@ result = df.group_by(
 **Our version:**
 
 ```haskell
+-- import DataFrame.Operators
 let decade d = let (y, _, _) = toGregorian d 
                 in (y `div` 10) * 10
 
 df_csv
     |> D.derive "decade" (F.lift decade (F.col @Day "birthdate"))
     |> D.groupBy ["decade"]
-    |> D.aggregate [ F.count (F.col @Day "decade") `F.as` "sample_size"
-                   , F.mean (F.col @Double "weight") `F.as` "avg_weight"
-                   , F.max (F.col @Double "height") `F.as` "tallest"
+    |> D.aggregate [ F.count (F.col @Day "decade") `as` "sample_size"
+                   , F.mean (F.col @Double "weight") `as` "avg_weight"
+                   , F.max (F.col @Double "height") `as` "tallest"
                    ]
 ```
 
@@ -845,6 +846,7 @@ result = (
 
 ```haskell
 import qualified Data.Text as T
+import DataFrame.Operators
 
 let decade d = let (y, _, _) = toGregorian d 
                 in (y `div` 10) * 10
@@ -855,9 +857,9 @@ df_csv
     |> D.derive "decade" (F.lift decade (F.col @Day "birthdate"))
     |> D.exclude ["birthdate"]
     |> D.groupBy ["decade"]
-    |> D.aggregate [ F.mean (F.col @Double "weight") `F.as` "avg_weight"
-                   , F.mean (F.col @Double "height") `F.as` "avg_height"
-                   , F.collect (F.col @T.Text "name") `F.as` "names"
+    |> D.aggregate [ F.mean (F.col @Double "weight") `as` "avg_weight"
+                   , F.mean (F.col @Double "height") `as` "avg_height"
+                   , F.collect (F.col @T.Text "name") `as` "names"
                    ]
 ```
 
@@ -1096,11 +1098,12 @@ starwars %>%
 **Our version:**
 
 ```haskell
+-- import DataFrame.Operators
 starwars 
   |> D.select ["species", "mass"]
   |> D.groupBy ["species"]
-  |> D.aggregate [ F.mean mass `F.as` "mean_mass"
-                 , F.count mass `F.as` "count"
+  |> D.aggregate [ F.mean mass `as` "mean_mass"
+                 , F.count mass `as` "count"
                  ]
   |> D.filterWhere ((F.col @Int "count" .> 1) .&& (F.col @Double "mean_mass" .> 50))
 ```
@@ -1164,8 +1167,8 @@ df |> D.derive "new_col" (old_col * 2)
 **Grouping and Aggregating:**
 ```haskell
 df |> D.groupBy ["group_col"]
-   |> D.aggregate [ F.mean val `F.as` "avg_val"
-                  , F.count val `F.as` "n"
+   |> D.aggregate [ F.mean val `as` "avg_val"
+                  , F.count val `as` "n"
                   ]
 ```
 

@@ -10,7 +10,7 @@ import qualified DataFrame.Functions as F
 
 import Data.Text (Text)
 import Data.Time
-import DataFrame ((|>))
+import DataFrame.Operators
 
 $( F.declareColumnsFromCsvWithOpts
     (D.defaultReadOptions{D.columnSeparator = ';'})
@@ -33,9 +33,9 @@ main = do
         parsed
             |> D.groupBy [F.name city]
             |> D.aggregate
-                [ F.minimum measurement `F.as` "minimum"
-                , F.mean measurement `F.as` "mean"
-                , F.maximum measurement `F.as` "maximum"
+                [ F.minimum measurement `as` "minimum"
+                , F.mean measurement `as` "mean"
+                , F.maximum measurement `as` "maximum"
                 ]
             |> D.sortBy [D.Asc city]
     endCalculation <- getCurrentTime

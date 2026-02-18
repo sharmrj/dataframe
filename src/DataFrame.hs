@@ -69,7 +69,7 @@ ghci> D.describeColumns df0
  longitude          | 20640             | 0             | 0                  | 844             | Double
 
 -- 2) Project & filter
-ghci> :exposeColumn df
+ghci> :declareColumns df
 ghci> df1 = D.filterWhere (ocean_proximity .== \"ISLAND\") df0 D.|> D.select [F.name median_house_value, F.name median_income, F.name ocean_proximity]
 
 -- 3) Add a derived column using the expression DSL
@@ -77,10 +77,11 @@ ghci> df1 = D.filterWhere (ocean_proximity .== \"ISLAND\") df0 D.|> D.select [F.
 ghci> df2 = D.derive "rooms_per_household" (total_rooms / households) df0
 
 -- 4) Group + aggregate
+ghci> import DataFrame.Operators
 ghci> let grouped   = D.groupBy ["ocean_proximity"] df0
 ghci> let summary   =
          D.aggregate
-             [ F.maximum median_house_value \`F.as\` "max_house_value"]
+             [ F.maximum median_house_value \`as\` "max_house_value"]
              grouped
 ghci> D.take 5 summary
 ----------------------------------
@@ -198,6 +199,9 @@ module DataFrame (
     module Row,
     module Expression,
 
+    -- * Operator symbols.
+    module Operators,
+
     -- * Display operations
     module Display,
 
@@ -226,9 +230,6 @@ module DataFrame (
 
     -- * Plotting
     module Plot,
-
-    -- * Convenience functions
-    (|>),
 )
 where
 
@@ -352,7 +353,4 @@ import DataFrame.Operations.Subset as Subset (
     takeLast,
  )
 import DataFrame.Operations.Transformations as Transformations
-
-import Data.Function ((&))
-
-(|>) = (&)
+import DataFrame.Operators as Operators
