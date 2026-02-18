@@ -33,6 +33,7 @@ import qualified Operations.Statistics
 import qualified Operations.Subset
 import qualified Operations.Take
 import qualified Parquet
+import qualified UnstableParquet
 
 testData :: D.DataFrame
 testData =
@@ -5124,6 +5125,7 @@ tests =
             ++ Operations.Take.tests
             ++ Functions.tests
             ++ Parquet.tests
+            ++ UnstableParquet.tests
             ++ parseTests
 
 isSuccessful :: Result -> Bool
