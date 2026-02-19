@@ -78,6 +78,7 @@ library
                     DataFrame.IO.JSON,
                     DataFrame.IO.Unstable.CSV,
                     DataFrame.IO.Unstable.Parquet,
+                    DataFrame.IO.Unstable.Parquet.Reader,
                     DataFrame.IO.Unstable.Parquet.Thrift,
                     DataFrame.IO.Unstable.Parquet.Thrift.Compact,
                     DataFrame.IO.Parquet,

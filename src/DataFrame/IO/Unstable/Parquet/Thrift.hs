@@ -1,10 +1,13 @@
 {-# LANGUAGE ApplicativeDo #-}
 
-module DataFrame.IO.Unstable.Parquet.Thrift where
+module DataFrame.IO.Unstable.Parquet.Thrift (parseFileMetadata) where
 
 import Control.Monad (void)
+import Data.Bits (shiftL, (.|.))
 import qualified Data.ByteString as BS
+import Data.Functor ((<&>))
 import Data.Int (Int32, Int8)
+import Data.List (foldl')
 import qualified Data.Text as T
 import DataFrame.IO.Parquet.Thrift
 import DataFrame.IO.Parquet.Types (
@@ -27,23 +30,26 @@ import DataFrame.IO.Parquet.Types (
     parquetTypeFromInt,
     repetitionTypeFromInt,
  )
-import DataFrame.IO.Unstable.Parquet.Thrift.Compact (
-    ParquetMetadataException,
-    ParquetMetadataParser,
+import DataFrame.IO.Unstable.Parquet.Reader (
+    ParquetReader (..),
+    ParquetReaderException (..),
     byte,
     int32,
     int64,
+    runParquetReader,
+    throwParseError,
+ )
+import DataFrame.IO.Unstable.Parquet.Thrift.Compact (
     parseStruct,
-    runParquetMetadataParser,
     skipField,
     thriftBinary,
     thriftList,
     thriftString,
-    throwParseError,
  )
+import DataFrame.IO.Utils.RandomAccess (RandomAccess (..))
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L1277
-fileMetadata :: ParquetMetadataParser FileMetadata
+fileMetadata :: ParquetReader FileMetadata
 fileMetadata =
     parseStruct defaultMetadata $ \filemetadata fieldId compacttype ->
         case fieldId of
@@ -60,7 +66,7 @@ fileMetadata =
             _ -> skipField compacttype >> return filemetadata
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L505
-schemaElement :: ParquetMetadataParser SchemaElement
+schemaElement :: ParquetReader SchemaElement
 schemaElement =
     parseStruct defaultSchemaElement $ \schemaelement fieldid compacttype ->
         case fieldid of
@@ -77,7 +83,7 @@ schemaElement =
             _ -> skipField compacttype >> return schemaelement
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L1021
-rowGroup :: ParquetMetadataParser RowGroup
+rowGroup :: ParquetReader RowGroup
 rowGroup =
     parseStruct emptyRowGroup $ \rowgroup fieldid compacttype ->
         case fieldid of
@@ -91,7 +97,7 @@ rowGroup =
             _ -> skipField compacttype >> return rowgroup
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L963
-columnChunk :: ParquetMetadataParser ColumnChunk
+columnChunk :: ParquetReader ColumnChunk
 columnChunk =
     parseStruct emptyColumnChunk $ \columnchunk fieldid compacttype ->
         case fieldid of
@@ -125,7 +131,7 @@ columnChunk =
             _ -> skipField compacttype >> return columnchunk
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L880
-parseColumnMetaData :: ParquetMetadataParser ColumnMetaData
+parseColumnMetaData :: ParquetReader ColumnMetaData
 parseColumnMetaData =
     parseStruct emptyColumnMetadata $ \columnmetadata fieldid compacttype ->
         case fieldid of
@@ -157,7 +163,7 @@ parseColumnMetaData =
             _ -> skipField compacttype >> return columnmetadata
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L267
-statistics :: ParquetMetadataParser ColumnStatistics
+statistics :: ParquetReader ColumnStatistics
 statistics =
     parseStruct emptyColumnStatistics $ \columnstatistics fieldid compacttype ->
         case fieldid of
@@ -172,7 +178,7 @@ statistics =
             _ -> skipField compacttype >> return columnstatistics
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L202
-sizeStatistics :: ParquetMetadataParser SizeStatistics
+sizeStatistics :: ParquetReader SizeStatistics
 sizeStatistics =
     parseStruct emptySizeStatistics $ \sizestatistics fieldid compacttype ->
         case fieldid of
@@ -182,7 +188,7 @@ sizeStatistics =
             _ -> skipField compacttype >> return sizestatistics
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L841
-keyValuePair :: ParquetMetadataParser KeyValue
+keyValuePair :: ParquetReader KeyValue
 keyValuePair =
     parseStruct emptyKeyValue $ \keyvalue fieldid compacttype ->
         case fieldid of
@@ -191,7 +197,7 @@ keyValuePair =
             _ -> skipField compacttype >> return keyvalue
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L864
-pageEncodingStats :: ParquetMetadataParser PageEncodingStats
+pageEncodingStats :: ParquetReader PageEncodingStats
 pageEncodingStats =
     parseStruct emptyPageEncodingStats $ \pageencoding fieldid compacttype ->
         case fieldid of
@@ -201,7 +207,7 @@ pageEncodingStats =
             _ -> skipField compacttype >> return pageencoding
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L849
-sortingColumn :: ParquetMetadataParser SortingColumn
+sortingColumn :: ParquetReader SortingColumn
 sortingColumn =
     parseStruct emptySortingColumn $ \sortingcolumn fieldid compacttype ->
         case fieldid of
@@ -211,7 +217,7 @@ sortingColumn =
             _ -> skipField compacttype >> return sortingcolumn
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L1065
-columnOrder :: ParquetMetadataParser ColumnOrder
+columnOrder :: ParquetReader ColumnOrder
 columnOrder =
     parseStruct COLUMN_ORDER_UNKNOWN $ \columnorder fieldid _ ->
         case fieldid of
@@ -219,7 +225,7 @@ columnOrder =
             _ -> return columnorder
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L1269
-parseEncryptionAlgorithm :: ParquetMetadataParser EncryptionAlgorithm
+parseEncryptionAlgorithm :: ParquetReader EncryptionAlgorithm
 parseEncryptionAlgorithm =
     parseStruct ENCRYPTION_ALGORITHM_UNKNOWN $ \encryption fieldid compacttype ->
         case fieldid of
@@ -228,7 +234,7 @@ parseEncryptionAlgorithm =
             _ -> skipField compacttype >> return encryption
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L1245
-aesGcmV1 :: EncryptionAlgorithm -> ParquetMetadataParser EncryptionAlgorithm
+aesGcmV1 :: EncryptionAlgorithm -> ParquetReader EncryptionAlgorithm
 aesGcmV1 v =
     parseStruct v $ \encryption fieldid compacttype ->
         case encryption of
@@ -241,7 +247,7 @@ aesGcmV1 v =
             _ -> return encryption
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L1257
-aesGcmCtrV1 :: EncryptionAlgorithm -> ParquetMetadataParser EncryptionAlgorithm
+aesGcmCtrV1 :: EncryptionAlgorithm -> ParquetReader EncryptionAlgorithm
 aesGcmCtrV1 v =
     parseStruct v $ \encryption fieldid compacttype ->
         case encryption of
@@ -254,7 +260,7 @@ aesGcmCtrV1 v =
             _ -> return encryption
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L471
-parseLogicalType :: ParquetMetadataParser LogicalType
+parseLogicalType :: ParquetReader LogicalType
 parseLogicalType =
     parseStruct LOGICAL_TYPE_UNKNOWN $ \logicaltype fieldid compacttype ->
         case fieldid of
@@ -281,7 +287,7 @@ parseLogicalType =
             _ -> skipField compacttype >> return logicaltype
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L343
-decimalType :: Int32 -> Int32 -> ParquetMetadataParser LogicalType
+decimalType :: Int32 -> Int32 -> ParquetReader LogicalType
 decimalType prec sc =
     parseStruct (DecimalType prec sc) $ \logicaltype fieldid compacttype ->
         case fieldid of
@@ -290,7 +296,7 @@ decimalType prec sc =
             _ -> skipField compacttype >> return logicaltype
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L373
-timeType :: Bool -> TimeUnit -> ParquetMetadataParser LogicalType
+timeType :: Bool -> TimeUnit -> ParquetReader LogicalType
 timeType adj unit =
     parseStruct (TimeType adj unit) $ \logicaltype fieldid compacttype ->
         case fieldid of
@@ -299,7 +305,7 @@ timeType adj unit =
             _ -> skipField compacttype >> return logicaltype
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L363
-timestampType :: Bool -> TimeUnit -> ParquetMetadataParser LogicalType
+timestampType :: Bool -> TimeUnit -> ParquetReader LogicalType
 timestampType adj unit =
     parseStruct (TimestampType adj unit) $ \logicaltype fieldid compacttype ->
         case fieldid of
@@ -308,7 +314,7 @@ timestampType adj unit =
             _ -> skipField compacttype >> return logicaltype
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L385
-intType :: Int8 -> Bool -> ParquetMetadataParser LogicalType
+intType :: Int8 -> Bool -> ParquetReader LogicalType
 intType bw signed =
     parseStruct (IntType bw signed) $ \logicaltype fieldid compacttype ->
         case fieldid of
@@ -317,7 +323,7 @@ intType bw signed =
             _ -> skipField compacttype >> return logicaltype
 
 -- https://github.com/apache/parquet-format/blob/master/src/main/thrift/parquet.thrift#L352
-timeUnit :: ParquetMetadataParser TimeUnit
+timeUnit :: ParquetReader TimeUnit
 timeUnit =
     parseStruct TIME_UNIT_UNKNOWN $ \timeunit fieldid compacttype ->
         case fieldid of
@@ -327,5 +333,16 @@ timeUnit =
             _ -> skipField compacttype >> return timeunit
 
 parseFileMetadata ::
-    BS.ByteString -> Either ParquetMetadataException FileMetadata
-parseFileMetadata = fmap fst . runParquetMetadataParser fileMetadata
+    (RandomAccess r) => r FileMetadata
+parseFileMetadata = do
+    footerOffset <- readSuffix 8
+    let size = getMetadataSize footerOffset
+    rawMetadata <- readSuffix (size + 8) <&> BS.take size
+    case runParquetReader fileMetadata rawMetadata of
+        Left e -> error $ show e
+        Right (metadata, _) -> return metadata
+  where
+    getMetadataSize footer =
+        let sizes :: [Int]
+            sizes = map (fromIntegral . BS.index footer) [0 .. 3]
+         in foldl' (.|.) 0 $ zipWith shiftL sizes [0, 8 .. 24]
