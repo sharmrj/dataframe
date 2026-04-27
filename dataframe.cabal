@@ -92,6 +92,7 @@ library
                     DataFrame.IO.Parquet.Utils,
                     DataFrame.IO.Parquet.Seeking,
                     DataFrame.IO.Parquet.Time,
+                    DataFrame.IO.Parquet.Memory,
                     DataFrame.Lazy.IO.CSV,
                     DataFrame.Lazy.IO.Binary,
                     DataFrame.Lazy.Internal.DataFrame,
@@ -148,6 +149,7 @@ library
 
     hs-source-dirs:   src
     default-language: Haskell2010
+    ghc-options: -O2
 
 foreign-library dataframe-arrow
     type:             native-shared
@@ -192,6 +194,15 @@ executable synthesis
     hs-source-dirs:   app
     default-language: Haskell2010
     ghc-options: -rtsopts -threaded -with-rtsopts=-N
+
+executable parquetprofile
+    import: warnings
+    main-is: ParquetProfile.hs
+    build-depends:    base >= 4 && < 5,
+                      dataframe ^>= 1.1,
+    hs-source-dirs:   app
+    default-language: Haskell2010
+    ghc-options: -O2 -rtsopts -threaded -with-rtsopts=-N
 
 executable dataframe
     import: warnings

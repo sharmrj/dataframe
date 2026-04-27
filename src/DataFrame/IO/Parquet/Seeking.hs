@@ -18,12 +18,14 @@ module DataFrame.IO.Parquet.Seeking (
     withFileBufferedOrSeekable,
     fSeek,
     fGet,
+    fGetBuf,
 ) where
 
 import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.ByteString as BS
 import Data.ByteString.Unsafe (unsafeDrop, unsafeTake)
+import Data.ByteString.Internal (toForeignPtr0)
 import Data.IORef
 import Data.Int
 import Data.Word
@@ -32,6 +34,7 @@ import qualified Streamly.Data.Stream as S
 import qualified Streamly.External.ByteString as SBS
 import qualified Streamly.FileSystem.Handle as SHandle
 import System.IO
+import Foreign (Ptr, withForeignPtr, copyBytes, plusPtr, Storable)
 
 {- | This handle carries a proof that it must be seekable.
 Note: Handle and SeekableHandle are not thread safe, should not be
@@ -135,12 +138,43 @@ fSeek (FileBuffered i _bs) AbsoluteSeek seekTo = writeIORef i (fromIntegral seek
 fSeek (FileBuffered i _bs) RelativeSeek seekTo = modifyIORef' i (+ fromIntegral seekTo)
 fSeek (FileBuffered i bs) SeekFromEnd seekTo = writeIORef i (fromIntegral $ BS.length bs + fromIntegral seekTo)
 
+-- Make sure that buf has enough space before calling this
+fGetBuf :: (Storable a) => FileBufferedOrSeekable -> Ptr a -> Int -> IO Int
+fGetBuf _ _ count
+  | count < 0 = error "Can't read a negative number of bytes"
+fGetBuf (FileSeekable (SeekableHandle h)) buf count = hGetBuf h buf count
+-- Ideally in this case, we'd have ptrs pointing to different parts of
+-- the bytestring but there might be gotchas there and I don't want to deal
+-- with unsafe conversions between ForeignPtr and Ptr along with touchForeignPtr
+-- But if we are in a situation where a particular file cannot be seeked (sought?)
+-- we're probably better of with mmapping that file anyway (if that is at all possible)
+fGetBuf (FileBuffered iRef bs) buf count = do
+  i <- fromIntegral <$> readIORef iRef
+  when (i < 0) $ error "Buffered File has position < 0"
+  let (fptr, bsLen) = toForeignPtr0 bs
+  if (bsLen - i) < count
+      then if i <= bsLen
+               then withForeignPtr fptr (\ptr -> do
+                       let ptr' = ptr `plusPtr` i
+                           n = bsLen - i
+                       copyBytes buf ptr' n
+                       return n
+                     )
+               else return 0
+      else withForeignPtr fptr (\ptr -> do
+        let ptr' = ptr `plusPtr` i
+        copyBytes buf ptr' count
+        return count
+      )
+        
+
 fGet :: FileBufferedOrSeekable -> Int -> IO BS.ByteString
 fGet (FileSeekable (SeekableHandle h)) n = BS.hGet h n
 fGet (FileBuffered iRef bs) n
     | n == 0 = pure BS.empty
     | n > 0 = do
         i <- fromIntegral <$> readIORef iRef
+        when (i < 0) $ error "Buffered File has position < 0"
         if (BS.length bs - i) < n
             then if i <= BS.length bs then pure $ unsafeDrop i bs else pure BS.empty
             else pure . unsafeTake n . unsafeDrop i $ bs

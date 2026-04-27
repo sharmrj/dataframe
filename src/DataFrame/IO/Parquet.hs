@@ -21,6 +21,7 @@ import Data.List (foldl', transpose)
 import qualified Data.List as L
 import qualified Data.Map as Map
 import qualified Data.Text as T
+import Data.Word (Word8, Word32)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Time (UTCTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
@@ -91,6 +92,9 @@ import System.Environment (lookupEnv)
 import System.FilePath ((</>))
 import System.FilePath.Glob (compile, glob, match)
 import System.IO (IOMode (ReadMode))
+import Foreign (withPool, Pool, pooledMalloc, pooledMallocBytes)
+import DataFrame.IO.Parquet.Memory (ParquetReaderMemoryPool (ParquetReaderMemoryPool), Buffer (Buffer))
+import GHC.Exts (Ptr(Ptr))
 
 -- Options -----------------------------------------------------------------
 
@@ -178,8 +182,9 @@ readParquetWithOpts opts path
 _readParquetWithOpts ::
     ForceNonSeekable -> ParquetReadOptions -> FilePath -> IO DataFrame
 _readParquetWithOpts extraConfig opts path =
-    withFileBufferedOrSeekable extraConfig path ReadMode $ \file ->
-        runReaderIO (parseParquetWithOpts opts) file
+    withPool $ \pool -> 
+        withFileBufferedOrSeekable extraConfig path ReadMode $ \file ->
+            runReaderIO (parseParquetWithOpts opts pool) file
 
 {- | Read Parquet files from a directory or glob path.
 
@@ -236,8 +241,9 @@ read options. This is the central parsing entry point used by
 parseParquetWithOpts ::
     (RandomAccess m, MonadIO m) =>
     ParquetReadOptions ->
+    Pool ->
     m DataFrame
-parseParquetWithOpts opts = do
+parseParquetWithOpts opts pool = do
     metadata <- parseFileMetadata
 
     let schemaElems = unField metadata.schema
@@ -295,7 +301,9 @@ parseParquetWithOpts opts = do
                 Int
         vectorLength = if topLevelRows > 0 then topLevelRows else rgRows
 
-    rawCols <- zipWithM (parseColumnChunks vectorLength) chunks descriptions
+   
+    parquetReaderMemoryPool <- initParquetReaderMemoryPool pool chunks
+    rawCols <- zipWithM (parseColumnChunks vectorLength parquetReaderMemoryPool) chunks descriptions
 
     let finalCols = zipWith applyDescLogicalType descriptions rawCols
         indices = Map.fromList $ zip allNames [0 ..]
@@ -351,27 +359,29 @@ columnChunksForAll =
 -- | Dispatch a column's chunks to the correct decoder path.
 parseColumnChunks ::
     (RandomAccess m, MonadIO m) =>
+    ParquetReaderMemoryPool ->
     Int ->
     [ColumnChunk] ->
     ColumnDescription ->
     m Column
-parseColumnChunks totalRows chunks description
+parseColumnChunks readerBuffers totalRows chunks description
     | description.maxRepetitionLevel == 0 && description.maxDefinitionLevel == 0 =
-        getNonNullableColumn totalRows description chunks
+        getNonNullableColumn readerBuffers totalRows description chunks
     | description.maxRepetitionLevel == 0 =
-        getNullableColumn totalRows description chunks
+        getNullableColumn readerBuffers totalRows description chunks
     | otherwise =
-        getRepeatedColumn description chunks
+        getRepeatedColumn readerBuffers description chunks
 
 -- | Decode a required (non-nullable, non-repeated) column.
 getNonNullableColumn ::
     forall m.
     (RandomAccess m, MonadIO m) =>
+    ParquetReaderMemoryPool ->
     Int ->
     ColumnDescription ->
     [ColumnChunk] ->
     m Column
-getNonNullableColumn totalRows description chunks =
+getNonNullableColumn readerBuffers totalRows description chunks =
     case description.colElementType of
         Just (BOOLEAN _) -> go boolDecoder
         Just (INT32 _) -> go int32Decoder
@@ -393,17 +403,18 @@ getNonNullableColumn totalRows description chunks =
     go decoder =
         foldNonNullable totalRows $
             fmap (\(vs, _, _) -> vs) $
-                Stream.unfoldEach (readPages description decoder) (Stream.fromList chunks)
+                Stream.unfoldEach (readPages readerBuffers description decoder) (Stream.fromList chunks)
 
 -- | Decode an optional (nullable) column.
 getNullableColumn ::
     forall m.
     (RandomAccess m, MonadIO m) =>
+    ParquetReaderMemoryPool ->
     Int ->
     ColumnDescription ->
     [ColumnChunk] ->
     m Column
-getNullableColumn totalRows description chunks =
+getNullableColumn readerBuffers totalRows description chunks =
     case description.colElementType of
         Just (BOOLEAN _) -> go boolDecoder
         Just (INT32 _) -> go int32Decoder
@@ -428,16 +439,17 @@ getNullableColumn totalRows description chunks =
     go decoder =
         foldNullable maxDef totalRows $
             fmap (\(vs, ds, _) -> (vs, ds)) $
-                Stream.unfoldEach (readPages description decoder) (Stream.fromList chunks)
+                Stream.unfoldEach (readPages readerBuffers description decoder) (Stream.fromList chunks)
 
 -- | Decode a repeated (list/nested) column.
 getRepeatedColumn ::
     forall m.
     (RandomAccess m, MonadIO m) =>
+    ParquetReaderMemoryPool ->
     ColumnDescription ->
     [ColumnChunk] ->
     m Column
-getRepeatedColumn description chunks =
+getRepeatedColumn readerBuffers description chunks =
     case description.colElementType of
         Just (BOOLEAN _) -> go boolDecoder
         Just (INT32 _) -> go int32Decoder
@@ -467,7 +479,7 @@ getRepeatedColumn description chunks =
         m Column
     go decoder =
         foldRepeated maxRep maxDef $
-            Stream.unfoldEach (readPages description decoder) (Stream.fromList chunks)
+            Stream.unfoldEach (readPages readerBuffers description decoder) (Stream.fromList chunks)
 
 -- Options application -----------------------------------------------------
 
@@ -690,3 +702,26 @@ fetchHFParquetFiles uri = do
             let url = directHFUrl ref
             let filename = last $ T.splitOn "/" (hfGlob ref)
             downloadHFFiles mToken [HFParquetFile url "" "" filename]
+
+-- Init Buffers for the Reader -----------------------------------------------------
+
+initParquetReaderMemoryPool :: Pool -> [[ColumnChunk]] -> IO ParquetReaderMemoryPool
+initParquetReaderMemoryPool pool chunks = do
+  columnChunkBufferPtr      <- pooledMallocBytes pool maxColumnChunkBufferSize :: IO (Ptr Word8)
+  pageBufferPtr             <- pooledMallocBytes pool maxPageBufferSize
+  uncompressedPageBufferPtr <- pooledMallocBytes pool maxUncompressedPageSize
+  repLevelsBufferPtr        <- pooledMallocBytes pool maxNumValuesPerPage
+  defLevelsBufferPtr        <- pooledMallocBytes pool maxNumValuesPerPage
+  dictIndexBufferPtr        <- pooledMallocBytes pool maxDictSize
+  valuesBufferPtr           <- pooledMallocBytes pool maxNumValuesPerPage
+  return $ ParquetReaderMemoryPool
+             pool
+             (Buffer columnChunkBufferPtr 0 maxColumnChunkBufferSize)
+             (Buffer pageBufferPtr 0 maxPageBufferSize)
+             (Buffer uncompressedPageBufferPtr 0 maxUncompressedPageSize)
+             (Buffer repLevelsBufferPtr 0 maxNumValuesPerPage)
+             (Buffer defLevelsBufferPtr 0 maxNumValuesPerPage)
+             (Buffer dictIndexBufferPtr 0 maxDictSize)
+
+             (Buffer valuesBufferPtr 0 maxNumValuesPerPage)
+  

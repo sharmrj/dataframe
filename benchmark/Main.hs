@@ -218,6 +218,11 @@ main = do
                         "./data/effects-of-covid-19-on-trade-at-15-december-2021-provisional.csv"
             ]
         , bgroup
+            "parquet/1987"
+            [ bench "DataFrame.IO.Parquet" $
+                nfIO $ void $ D.readParquet "../1987.parquet"
+            ]
+        , bgroup
             "join/inner/1:1"
             [ env (mkOneToOne 1_000 1.0) $ \ ~(l, r) ->
                 bench "1K rows" $ nf (innerJoin ["key"] r) l

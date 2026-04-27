@@ -59,6 +59,7 @@ import GHC.Float (castWord32ToFloat, castWord64ToDouble)
 import Pinch (decodeWithLeftovers)
 import qualified Pinch
 import Streamly.Internal.Data.Unfold (Step (..), Unfold, mkUnfoldM)
+import DataFrame.IO.Parquet.Memory (ParquetReaderMemoryPool)
 
 -- ---------------------------------------------------------------------------
 -- Types
@@ -216,10 +217,11 @@ The internal state is
 -}
 readPages ::
     (RandomAccess m, MonadIO m) =>
+    ParquetReaderMemoryPool ->
     ColumnDescription ->
     PageDecoder a ->
     Unfold m ColumnChunk (VB.Vector a, VU.Vector Int, VU.Vector Int)
-readPages description decoder = mkUnfoldM step inject
+readPages readerBuffers description decoder = mkUnfoldM step inject
   where
     maxDef = fromIntegral description.maxDefinitionLevel :: Int
     maxRep = fromIntegral description.maxRepetitionLevel :: Int
